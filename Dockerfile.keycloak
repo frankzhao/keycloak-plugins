@@ -1,0 +1,29 @@
+# Stage 1 — Build the custom login SPI
+FROM maven:3.9-eclipse-temurin-17 AS login-builder
+WORKDIR /build
+COPY keycloak-custom-login/pom.xml .
+RUN mvn dependency:go-offline -q
+COPY keycloak-custom-login/src/ ./src/
+RUN mvn package -q -DskipTests
+
+# Stage 2 — Build the custom mapper SPI
+FROM maven:3.9-eclipse-temurin-17 AS mapper-builder
+WORKDIR /build
+COPY keycloak-custom-mapper/pom.xml .
+RUN mvn dependency:go-offline -q
+COPY keycloak-custom-mapper/src/ ./src/
+RUN mvn package -q -DskipTests
+
+# Stage 3 — Build the custom IdP mapper SPI
+FROM maven:3.9-eclipse-temurin-17 AS idp-mapper-builder
+WORKDIR /build
+COPY keycloak-custom-idp-mapper/pom.xml .
+RUN mvn dependency:go-offline -q
+COPY keycloak-custom-idp-mapper/src/ ./src/
+RUN mvn package -q -DskipTests
+
+# Stage 4 — Keycloak 24 with all providers installed
+FROM quay.io/keycloak/keycloak:24.0
+COPY --from=login-builder      /build/target/keycloak-custom-login.jar      /opt/keycloak/providers/
+COPY --from=mapper-builder     /build/target/keycloak-custom-mapper.jar     /opt/keycloak/providers/
+COPY --from=idp-mapper-builder /build/target/keycloak-custom-idp-mapper.jar /opt/keycloak/providers/

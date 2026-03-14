@@ -1,0 +1,24 @@
+# Maven
+keycloak-custom-login/target/
+keycloak-custom-login/.mvn/
+*.class
+*.jar
+*.war
+
+# Python
+test-app/__pycache__/
+test-app/.venv/
+test-app/*.pyc
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
