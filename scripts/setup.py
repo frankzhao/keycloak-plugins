@@ -153,7 +153,29 @@ def setup_suffix_mapper(token):
     }, token)
 
 
+def _add_justification_to_flow(flow_alias, token):
+    """Add the justification step to the top level of a flow and set it REQUIRED."""
+    post(
+        f"/admin/realms/{REALM}/authentication/flows/{urllib.parse.quote(flow_alias)}/executions/execution",
+        {"provider": "justification-authenticator"},
+        token,
+    )
+    executions = get(
+        f"/admin/realms/{REALM}/authentication/flows/{urllib.parse.quote(flow_alias)}/executions",
+        token,
+    )
+    just_exec = next(e for e in executions if e.get("providerId") == "justification-authenticator")
+    just_exec["requirement"] = "REQUIRED"
+    put(
+        f"/admin/realms/{REALM}/authentication/flows/{urllib.parse.quote(flow_alias)}/executions",
+        just_exec,
+        token,
+    )
+
+
 def setup_auth_flow(token):
+    """Browser flow for local logins: copy browser flow and add justification
+    inside the Browser Forms subflow (after username/password + OTP)."""
     flows = get(f"/admin/realms/{REALM}/authentication/flows", token)
     existing = next((f for f in flows if f["alias"] == "browser-with-justification"), None)
 
@@ -165,15 +187,7 @@ def setup_auth_flow(token):
             token,
         )
         just_execs = [e for e in executions if e.get("providerId") == "justification-authenticator"]
-        top_level_wrong = any(e.get("level", 1) == 0 for e in just_execs)
-        if top_level_wrong:
-            print("  justification step is at top level — deleting and recreating flow...")
-            realm_data = get(f"/admin/realms/{REALM}", token)
-            realm_data["browserFlow"] = "browser"
-            put(f"/admin/realms/{REALM}", realm_data, token)
-            delete(f"/admin/realms/{REALM}/authentication/flows/{existing['id']}", token)
-            existing = None
-        elif not just_execs:
+        if not just_execs:
             print("  justification step missing — will add it...")
             need_add_step = True
         else:
@@ -189,7 +203,6 @@ def setup_auth_flow(token):
         need_add_step = True
 
     if need_add_step:
-        # Find the 'browser forms' subflow and add the justification step inside it
         executions = get(
             f"/admin/realms/{REALM}/authentication/flows/browser-with-justification/executions",
             token,
@@ -198,29 +211,9 @@ def setup_auth_flow(token):
             e for e in executions
             if e.get("authenticationFlow") and "forms" in e.get("displayName", "").lower()
         )
-        subflow_alias = browser_forms["displayName"]  # e.g. "browser-with-justification forms"
-
+        subflow_alias = browser_forms["displayName"]
         print("  adding justification step inside browser forms subflow...")
-        post(
-            f"/admin/realms/{REALM}/authentication/flows/{urllib.parse.quote(subflow_alias)}/executions/execution",
-            {"provider": "justification-authenticator"},
-            token,
-        )
-
-        # Set the new execution to REQUIRED
-        executions = get(
-            f"/admin/realms/{REALM}/authentication/flows/browser-with-justification/executions",
-            token,
-        )
-        just_exec = next(
-            e for e in executions if e.get("providerId") == "justification-authenticator"
-        )
-        just_exec["requirement"] = "REQUIRED"
-        put(
-            f"/admin/realms/{REALM}/authentication/flows/browser-with-justification/executions",
-            just_exec,
-            token,
-        )
+        _add_justification_to_flow(subflow_alias, token)
         print("  justification step added and set to REQUIRED")
 
     realm_data = get(f"/admin/realms/{REALM}", token)
@@ -230,6 +223,47 @@ def setup_auth_flow(token):
         put(f"/admin/realms/{REALM}", realm_data, token)
     else:
         print("  flow already bound")
+
+
+def setup_post_broker_flow(token):
+    """Post broker login flow for federated (SAML/OIDC) logins: a minimal flow
+    containing only the justification step, bound to the saml-test IdP."""
+    FLOW_ALIAS = "post-broker-justification"
+
+    flows = get(f"/admin/realms/{REALM}/authentication/flows", token)
+    existing = next((f for f in flows if f["alias"] == FLOW_ALIAS), None)
+
+    if existing:
+        executions = get(
+            f"/admin/realms/{REALM}/authentication/flows/{urllib.parse.quote(FLOW_ALIAS)}/executions",
+            token,
+        )
+        if any(e.get("providerId") == "justification-authenticator" for e in executions):
+            print("  post-broker flow already correct")
+        else:
+            print("  adding justification step to post-broker flow...")
+            _add_justification_to_flow(FLOW_ALIAS, token)
+            print("  justification step added")
+    else:
+        print("  creating post-broker-justification flow...")
+        post(f"/admin/realms/{REALM}/authentication/flows", {
+            "alias":       FLOW_ALIAS,
+            "description": "Runs justification form after any IdP login",
+            "providerId":  "basic-flow",
+            "topLevel":    True,
+            "builtIn":     False,
+        }, token)
+        _add_justification_to_flow(FLOW_ALIAS, token)
+        print("  post-broker flow created with justification step")
+
+    # Bind the flow to the SAML IdP
+    idp = get(f"/admin/realms/{REALM}/identity-provider/instances/saml-test", token)
+    if idp.get("postBrokerLoginFlowAlias") == FLOW_ALIAS:
+        print("  post-broker flow already bound to saml-test IdP")
+    else:
+        print("  binding post-broker flow to saml-test IdP...")
+        idp["postBrokerLoginFlowAlias"] = FLOW_ALIAS
+        put(f"/admin/realms/{REALM}/identity-provider/instances/saml-test", idp, token)
 
 
 def setup_saml_idp(token):
@@ -394,6 +428,7 @@ if __name__ == "__main__":
         ("suffix mapper",        setup_suffix_mapper),
         ("auth flow",            setup_auth_flow),
         ("SAML IdP",             setup_saml_idp),
+        ("post broker flow",     setup_post_broker_flow),
         ("required actions",     setup_required_actions),
         ("first broker login",   setup_first_broker_login),
     ]

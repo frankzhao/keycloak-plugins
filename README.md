@@ -60,6 +60,7 @@ The `setup` service (`scripts/setup.py`) runs once after Keycloak is healthy and
 | **Auth flow** | Copies the built-in `browser` flow to `browser-with-justification`, adds the **Login Justification Form** step inside the `Browser Forms` subflow (set to **Required**), and binds it as the realm browser flow |
 | **SAML IdP** | Imports the test SAML IdP metadata, sets `cn` as the principal attribute, and rewrites internal hostnames to `localhost:8085` so the browser can reach the IdP |
 | **SAML mappers** | Adds the **Username Transform Mapper** (`${username}-foo`) and attribute importers for `givenName` → `firstName`, `sn` → `lastName`, `mail` → `email` |
+| **Post broker flow** | Creates a `post-broker-justification` flow containing only the **Login Justification Form** step and binds it as the **Post Broker Login** flow on the `saml-test` IdP, ensuring the justification prompt appears after SAML authentication |
 | **Required actions** | Disables the `VERIFY_PROFILE` required action so federated users are not prompted to complete their profile on first login |
 | **First broker login** | Disables the **Review Profile** step in the first broker login flow so users are not prompted to update their account after SAML authentication |
 

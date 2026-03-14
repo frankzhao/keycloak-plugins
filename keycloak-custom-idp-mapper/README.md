@@ -66,6 +66,18 @@ To avoid Keycloak prompting users to complete their profile on first login, the 
 
 Without these, Keycloak's user profile validation will trigger a **Verify Profile** or **Update Account Information** screen after the first federation login. You should also disable the **VERIFY_PROFILE** required action in the realm (**Authentication** → **Required actions**) if you do not want users prompted to fill in missing fields.
 
+### Running steps after IdP authentication
+
+Keycloak does not continue through the main browser flow after an IdP login — steps inside the `Browser Forms` subflow (such as a justification form) are skipped for federated users. To run additional steps after SAML/OIDC authentication, use a **Post Broker Login** flow:
+
+1. Go to **Authentication** → **Create flow**
+2. Name it (e.g. `post-broker-justification`), set **Flow type** to **Generic**
+3. Add the desired step (e.g. **Login Justification Form**) → set to **Required**
+4. Open **Identity Providers** → select your IdP → **Advanced** tab
+5. Set **Post Login Flow** to the new flow → **Save**
+
+The post broker login flow runs after the IdP assertion is processed and after the first broker login flow completes, for both new and returning federated users.
+
 ## Building
 
 ```sh
